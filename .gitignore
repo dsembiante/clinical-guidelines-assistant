@@ -1,0 +1,6 @@
+# Add to .gitignore
+chroma_db/
+venv/
+__pycache__/
+*.pyc
+.env

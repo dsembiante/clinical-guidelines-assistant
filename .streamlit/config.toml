@@ -1,0 +1,20 @@
+# .streamlit/config.toml
+# Streamlit theme configuration for a professional healthcare appearance.
+# These values are automatically picked up by Streamlit at startup —
+# no code changes needed in app.py.
+
+[theme]
+# Primary accent color used for buttons, links, and interactive elements
+primaryColor = "#2E5FA3"
+
+# Main page background
+backgroundColor = "#FFFFFF"
+
+# Sidebar and widget background
+secondaryBackgroundColor = "#F0F2F6"
+
+# Default text color — dark navy for readability on white backgrounds
+textColor = "#1F3864"
+
+# System sans-serif for clean, legible text across all operating systems
+font = "sans serif"
