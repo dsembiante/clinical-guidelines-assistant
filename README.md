@@ -42,9 +42,9 @@ Not every question requires a document search. A dedicated router classifies eac
 **Assistant:** According to the CDC guidelines, adults aged 35–70 who are overweight or obese should be screened for prediabetes and type 2 diabetes. Screening should be repeated every 3 years if results are normal...
 
 **Sources (3 documents referenced)**
-- `cdc_148231_DS1.pdf` — Page 4 | Relevance: **High** (0.87)
-- `2023-adult.pdf` — Page 12 | Relevance: **High** (0.81)
-- `p776.pdf` — Page 2 | Relevance: **Medium** (0.63)
+- `dprp-standards.pdf` — Page 4 | Relevance: **High** (0.87)
+- `Guideline-Summary_Diabetes-mellitus_ADA-Standards_2024.pdf` — Page 12 | Relevance: **High** (0.81)
+- `obesity_guidelines_archive.pdf` — Page 2 | Relevance: **Medium** (0.63)
 
 ---
 
@@ -52,12 +52,12 @@ Not every question requires a document search. A dedicated router classifies eac
 
 | Component | Technology | Purpose |
 |---|---|---|
-| LLM | Llama 3 via Ollama | Generates answers locally — no API key or data sent to the cloud |
-| Embeddings | nomic-embed-text via Ollama | Converts document chunks into searchable vectors |
+| LLM | Llama 3.3 70B via Groq API | Fast cloud inference — free tier available, no local GPU required |
+| Embeddings | BAAI/bge-small-en-v1.5 via HuggingFace | Runs locally — no API key required, cached after first download |
 | Vector Store | ChromaDB | Persists and retrieves document embeddings |
 | RAG Framework | LlamaIndex | Orchestrates retrieval, memory, and response synthesis |
 | UI | Streamlit | Chat interface with citation cards and session controls |
-| Query Router | Custom LlamaIndex + Ollama | Classifies queries before retrieval to improve response quality |
+| Query Router | Custom LlamaIndex + Groq | Classifies queries before retrieval to improve response quality |
 
 ---
 
@@ -65,15 +65,9 @@ Not every question requires a document search. A dedicated router classifies eac
 
 ### Prerequisites
 - Python 3.10+
-- [Ollama](https://ollama.ai) installed and running
+- A free [Groq API key](https://console.groq.com)
 
-### 1. Pull the required models
-```bash
-ollama pull llama3
-ollama pull nomic-embed-text
-```
-
-### 2. Clone the repo and install dependencies
+### 1. Clone the repo and install dependencies
 ```bash
 git clone https://github.com/YOUR_USERNAME/clinical-guidelines-assistant.git
 cd clinical-guidelines-assistant
@@ -82,15 +76,21 @@ source venv/Scripts/activate  # Windows: venv\Scripts\activate.bat
 pip install -r requirements.txt
 ```
 
-### 3. Add your PDF documents
+### 2. Set your Groq API key
+Create a `.env` file in the project root:
+```
+GROQ_API_KEY=your_key_here
+```
+
+### 4. Add your PDF documents
 Place PDF files in the `docs/` folder.
 
-### 4. Run ingestion
+### 5. Run ingestion
 ```bash
 python ingest.py
 ```
 
-### 5. Launch the app
+### 6. Launch the app
 ```bash
 streamlit run app.py
 ```
