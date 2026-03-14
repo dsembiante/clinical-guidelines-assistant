@@ -10,7 +10,7 @@ A RAG-powered chat application that answers questions about CDC, NIH, and CMS he
 
 ## Screenshot
 
-*(Take a screenshot of the app after asking "What are the CDC recommendations for diabetes screening intervals?" with the Sources expander open showing at least two citations, then add the image here)*
+![App Screenshot](Streamlit Screenshot.png)
 
 ---
 
