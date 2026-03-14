@@ -4,7 +4,7 @@ A RAG-powered chat application that answers questions about CDC, NIH, and CMS he
 
 ## Live Demo
 
-**[Launch App](https://YOUR-APP-NAME.streamlit.app)** ← *(update this link after deploying to Streamlit Community Cloud)*
+**[Launch App](https://clinical-guidelines-assistant-emlr3kk5lgjqhw5fjqptgw.streamlit.app/)**
 
 ---
 
