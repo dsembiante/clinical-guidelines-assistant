@@ -4,9 +4,9 @@
 # preventing unnecessary document lookups and improving response quality.
 from enum import Enum
 
-from llama_index.llms.ollama import Ollama
+from llama_index.llms.groq import Groq
 
-from config import LLM_MODEL, OLLAMA_BASE_URL
+from config import GROQ_API_KEY, LLM_MODEL
 
 
 class QueryType(str, Enum):
@@ -41,12 +41,10 @@ class QueryRouter:
 
     def __init__(self):
         # temperature=0 makes routing deterministic — same query always gets same classification
-        # request_timeout increased to 120s — local LLMs can be slow on first inference
-        self.llm = Ollama(
+        self.llm = Groq(
             model=LLM_MODEL,
-            base_url=OLLAMA_BASE_URL,
+            api_key=GROQ_API_KEY,
             temperature=0,
-            request_timeout=120.0,
         )
 
     def route(self, query: str) -> QueryType:

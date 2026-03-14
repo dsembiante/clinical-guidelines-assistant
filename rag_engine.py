@@ -1,27 +1,49 @@
 # rag_engine.py
-# Core RAG engine that wires together LlamaIndex, Chroma, Ollama, conversation
+# Core RAG engine that wires together LlamaIndex, Chroma, Groq, conversation
 # memory, and citation extraction into a single interface for the Streamlit UI.
 import chromadb
 from dataclasses import dataclass
 from typing import Optional
 
+import re
+
 from llama_index.core import Settings, StorageContext, VectorStoreIndex
-from llama_index.core.chat_engine import CondensePlusContextChatEngine
+from llama_index.core.chat_engine import SimpleChatEngine
+from llama_index.core.llms import ChatMessage, MessageRole
 from llama_index.core.memory import ChatMemoryBuffer
-from llama_index.embeddings.ollama import OllamaEmbedding
-from llama_index.llms.ollama import Ollama
+from llama_index.core.schema import MetadataMode
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+from llama_index.llms.groq import Groq
 from llama_index.vector_stores.chroma import ChromaVectorStore
 
 from config import (
     CHROMA_DIR,
     COLLECTION_NAME,
     EMBED_MODEL,
+    GROQ_API_KEY,
     HIGH_CONFIDENCE_THRESHOLD,
     LLM_MODEL,
     MEMORY_TOKEN_LIMIT,
-    OLLAMA_BASE_URL,
     TOP_K_RESULTS,
 )
+
+# Prompt template for document-grounded answers.
+# Context is injected manually so we control exactly what the LLM sees —
+# no metadata, no partial sentences, just clean chunk text.
+DOCUMENT_QA_PROMPT = """You are a helpful healthcare information assistant.
+Using ONLY the document excerpts provided below, answer the question clearly and concisely.
+Write in flowing prose. Do NOT include excerpt labels, numbers, or references in your answer.
+Do NOT repeat or quote raw data verbatim — synthesize it into readable sentences.
+Do NOT add follow-up questions at the end of your answer.
+If the excerpts do not contain enough information to answer the question, say so clearly.
+Never provide personal medical advice.
+
+Document excerpts:
+{context}
+
+Question: {question}
+
+Answer (in plain prose, no labels or follow-up questions):"""
 
 
 @dataclass
@@ -50,18 +72,18 @@ class RAGEngine:
     """
 
     def __init__(self):
+        # Groq provides fast cloud inference for Llama 3 — no local GPU required
         # temperature=0.1 keeps responses factual while allowing slight natural variation
-        # request_timeout increased to 300s — local LLMs can be slow on first inference
-        Settings.llm = Ollama(
+        self.llm = Groq(
             model=LLM_MODEL,
-            base_url=OLLAMA_BASE_URL,
+            api_key=GROQ_API_KEY,
             temperature=0.1,
-            request_timeout=300.0,
         )
-        Settings.embed_model = OllamaEmbedding(
-            model_name=EMBED_MODEL,
-            base_url=OLLAMA_BASE_URL,
-        )
+        Settings.llm = self.llm
+
+        # HuggingFaceEmbedding runs locally — no API key required
+        # Must match the embedding model used during ingestion
+        Settings.embed_model = HuggingFaceEmbedding(model_name=EMBED_MODEL)
 
         # Connect to the persistent Chroma store created by ingest.py
         # Uses get_collection (not get_or_create) to fail fast if ingestion hasn't been run
@@ -69,40 +91,57 @@ class RAGEngine:
         collection = chroma_client.get_collection(COLLECTION_NAME)
         vector_store = ChromaVectorStore(chroma_collection=collection)
         storage_context = StorageContext.from_defaults(vector_store=vector_store)
-        self.index = VectorStoreIndex.from_vector_store(
+        index = VectorStoreIndex.from_vector_store(
             vector_store,
             storage_context=storage_context,
         )
 
+        # Retriever used for both document search and citation extraction
+        self.retriever = index.as_retriever(similarity_top_k=TOP_K_RESULTS)
+
         # Token-limited memory prevents the context window from growing unbounded
-        # across a long conversation session
         self.memory = ChatMemoryBuffer.from_defaults(
             token_limit=MEMORY_TOKEN_LIMIT,
         )
 
-        # CondensePlusContextChatEngine condenses prior chat history into the retrieval
-        # query so follow-up questions remain contextually accurate
-        retriever = self.index.as_retriever(similarity_top_k=TOP_K_RESULTS)
-        self.chat_engine = CondensePlusContextChatEngine.from_defaults(
-            retriever=retriever,
+        # SimpleChatEngine handles general knowledge queries with conversation memory
+        # No retrieval involved — answers come directly from the LLM
+        self.chat_engine = SimpleChatEngine.from_defaults(
             memory=self.memory,
             system_prompt=(
                 "You are a helpful healthcare information assistant. "
                 "You answer questions based on official CDC, NIH, and CMS guidelines. "
-                "Always be accurate and cite the guidelines when possible. "
-                "If the provided context does not contain enough information "
-                "to answer the question, say so clearly rather than speculating. "
+                "Always be accurate. If you are unsure, say so clearly. "
                 "Never provide personal medical advice."
             ),
-            verbose=False,
         )
 
-        # Store retriever separately so _extract_citations can call it independently
-        self.retriever = retriever
+    def _build_context(self, nodes) -> str:
+        """Extract plain text from retrieved nodes with no metadata.
 
-    def _extract_citations(self, query: str) -> list[Citation]:
-        """Retrieve source nodes and extract citation metadata."""
-        nodes = self.retriever.retrieve(query)
+        MetadataMode.NONE ensures file paths, page labels, and other metadata
+        are completely excluded from the text passed to the LLM.
+        """
+        excerpts = []
+        seen: set[str] = set()
+        for node in nodes:
+            text = node.node.get_content(metadata_mode=MetadataMode.NONE).strip()
+            if not text or text in seen:
+                continue
+            seen.add(text)
+            # If the chunk starts mid-sentence (lowercase first char), strip the
+            # incomplete leading fragment up to the first complete sentence boundary
+            if text and text[0].islower():
+                match = re.search(r'[.!?]\s+[A-Z]', text)
+                if match:
+                    text = text[match.start() + 2:]
+                else:
+                    continue  # Skip chunks that are entirely a sentence fragment
+            excerpts.append(text)
+        return "\n\n---\n\n".join(excerpts)
+
+    def _extract_citations(self, nodes) -> list[Citation]:
+        """Extract citation metadata from already-retrieved nodes."""
         citations = []
 
         for node in nodes:
@@ -122,9 +161,14 @@ class RAGEngine:
                 else "Low"
             )
 
+            try:
+                page_num = int(page) if page else None
+            except (ValueError, TypeError):
+                page_num = None
+
             citations.append(Citation(
                 filename=filename,
-                page_number=int(page) if page else None,
+                page_number=page_num,
                 relevance_score=round(score, 3),
                 text_snippet=snippet,
                 confidence_label=confidence_label,
@@ -134,12 +178,44 @@ class RAGEngine:
         return sorted(citations, key=lambda c: c.relevance_score, reverse=True)
 
     def query_documents(self, question: str) -> RAGResponse:
-        """Query the document store with conversation memory."""
-        response = self.chat_engine.chat(question)
-        citations = self._extract_citations(question)
+        """Retrieve relevant chunks, build a clean prompt, and call the LLM directly.
+
+        Bypasses LlamaIndex's response synthesizer entirely to guarantee no raw
+        chunk text or metadata leaks into the answer.
+        """
+        nodes = self.retriever.retrieve(question)
+        context = self._build_context(nodes)
+        citations = self._extract_citations(nodes)
+
+        # Use chat() with explicit system/user roles so the LLM outputs only
+        # its answer — complete() can blend prompt text into the response
+        messages = [
+            ChatMessage(
+                role=MessageRole.SYSTEM,
+                content=(
+                    "You are a helpful healthcare information assistant. "
+                    "Answer questions using only the provided document excerpts. "
+                    "Write in 2-4 clear sentences. Do not repeat yourself. "
+                    "Do not quote raw data verbatim. Do not add follow-up questions. "
+                    "If the excerpts lack sufficient information, say so briefly."
+                ),
+            ),
+            ChatMessage(
+                role=MessageRole.USER,
+                content=f"Document excerpts:\n{context}\n\nQuestion: {question}",
+            ),
+        ]
+        response = self.llm.chat(messages, max_tokens=1024)
+
+        answer = response.message.content.strip()
+        # Remove any leading sentence fragment the LLM may echo from the context
+        if answer and answer[0].islower():
+            boundary = re.search(r'[.!?]\s+[A-Z]', answer)
+            if boundary:
+                answer = answer[boundary.start() + 2:]
 
         return RAGResponse(
-            answer=str(response),
+            answer=answer,
             citations=citations,
             query_type="document_search",
             used_document_search=True,
@@ -148,16 +224,13 @@ class RAGEngine:
     def query_general(self, question: str) -> RAGResponse:
         """Answer from general knowledge using conversation memory.
 
-        Still routes through the chat engine to preserve memory continuity,
-        but explicitly instructs the LLM not to rely on document retrieval.
+        Routes through SimpleChatEngine which maintains memory but does
+        not perform document retrieval.
         """
-        response = self.chat_engine.chat(
-            f"Please answer this question from your general medical knowledge "
-            f"(no need to search specific documents): {question}"
-        )
+        response = self.chat_engine.chat(question)
 
         return RAGResponse(
-            answer=str(response),
+            answer=response.response,
             citations=[],  # No citations for general knowledge responses
             query_type="general_knowledge",
             used_document_search=False,

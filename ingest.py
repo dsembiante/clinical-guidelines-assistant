@@ -6,7 +6,7 @@ import os
 import chromadb
 from llama_index.core import Settings, SimpleDirectoryReader, StorageContext, VectorStoreIndex
 from llama_index.core.node_parser import SentenceSplitter
-from llama_index.embeddings.ollama import OllamaEmbedding
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.vector_stores.chroma import ChromaVectorStore
 
 from config import (
@@ -16,7 +16,6 @@ from config import (
     COLLECTION_NAME,
     DOCS_DIR,
     EMBED_MODEL,
-    OLLAMA_BASE_URL,
 )
 
 
@@ -24,11 +23,9 @@ def ingest_documents():
     """Load PDFs from docs/, chunk them, embed them, and store in Chroma."""
     print("Starting document ingestion...")
 
-    # Configure the global embedding model used by LlamaIndex
-    Settings.embed_model = OllamaEmbedding(
-        model_name=EMBED_MODEL,
-        base_url=OLLAMA_BASE_URL,
-    )
+    # HuggingFaceEmbedding runs locally — no API key required
+    # Model is downloaded on first run and cached automatically
+    Settings.embed_model = HuggingFaceEmbedding(model_name=EMBED_MODEL)
 
     # Validate that the docs directory exists and contains files before proceeding
     if not os.path.exists(DOCS_DIR) or not os.listdir(DOCS_DIR):
