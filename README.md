@@ -16,7 +16,9 @@ A RAG-powered chat application that answers questions about CDC, NIH, and CMS he
 
 ## Background and Motivation
 
-During my time as an automation engineer at Mercy Hospital, I worked closely with clinical workflows and saw firsthand how much time staff spent manually searching through CDC, NIH, and CMS guideline documents to answer protocol questions. The information exists — it's just buried across dozens of PDFs. I built this tool to make those guidelines instantly queryable, with every answer traceable back to its source document so clinicians and staff can verify what they're reading.
+As an automation engineer, one pattern shows up across every industry I've worked in: valuable information is locked inside documents, and people spend significant time extracting it manually. Whether it's clinical protocols, compliance guidelines, or operational procedures, the bottleneck is rarely the information itself — it's the ability to access it quickly and reliably.
+
+This project is a direct application of that problem. Public health guidelines from the CDC, NIH, and CMS are freely available but spread across dozens of PDFs. I built this tool to make those documents instantly queryable through natural language, with every answer traceable back to its source so users can verify what they're reading rather than trusting the model blindly.
 
 ---
 
@@ -69,10 +71,11 @@ Not every question requires a document search. A dedicated router classifies eac
 
 ### 1. Clone the repo and install dependencies
 ```bash
-git clone https://github.com/YOUR_USERNAME/clinical-guidelines-assistant.git
+git clone https://github.com/dsembiante/clinical-guidelines-assistant.git
 cd clinical-guidelines-assistant
 python -m venv venv
-source venv/Scripts/activate  # Windows: venv\Scripts\activate.bat
+venv\Scripts\activate        # Windows
+source venv/bin/activate     # Mac/Linux
 pip install -r requirements.txt
 ```
 
@@ -82,15 +85,16 @@ Create a `.env` file in the project root:
 GROQ_API_KEY=your_key_here
 ```
 
-### 4. Add your PDF documents
-Place PDF files in the `docs/` folder.
+### 3. Add your PDF documents
+Place PDF files in the `docs/` folder. Public domain documents from CDC, NIH, and CMS are recommended. Aim for 8–10 documents covering related topics (e.g., diabetes, hypertension, heart disease) so the assistant can answer questions that span multiple sources.
 
-### 5. Run ingestion
+### 4. Run ingestion
 ```bash
 python ingest.py
 ```
+> **Note:** The first run will download the `BAAI/bge-small-en-v1.5` embedding model from HuggingFace (~130MB). This only happens once — subsequent runs use the cached version and will be significantly faster.
 
-### 6. Launch the app
+### 5. Launch the app
 ```bash
 streamlit run app.py
 ```
@@ -104,3 +108,7 @@ streamlit run app.py
 - **Feedback mechanism** — thumbs up/down on answers to track accuracy over time
 - **Async ingestion** — background re-ingestion when new documents are added without restarting the app
 - **Hybrid search** — combine vector similarity with keyword (BM25) search for better recall on acronym-heavy medical queries
+
+---
+
+*Built as part of an AI engineering portfolio while pursuing an MS in Computer Science (Data Science concentration) at Wilmington University, expected May 2027.*
