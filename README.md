@@ -10,7 +10,7 @@ A RAG-powered chat application that answers questions about CDC, NIH, and CMS he
 
 ## Screenshot
 
-![App Screenshot](Streamlit Screenshot.png)
+![App Screenshot](StreamlitScreenshot.png)
 
 ---
 
