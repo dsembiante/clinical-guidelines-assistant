@@ -111,4 +111,12 @@ streamlit run app.py
 
 ---
 
-*Built as part of an AI engineering portfolio while pursuing an MS in Computer Science (Data Science concentration) at Wilmington University, expected May 2027.*
+## Author
+
+Dominic Sembiante
+
+LinkedIn: www.linkedin.com/in/dominic-sembiante-92b598149
+
+GitHub: github.com/dsembiante
+
+Built as part of an ongoing AI engineering portfolio exploring the evolution from traditional RPA and intelligent automation toward modern agentic AI architectures.
